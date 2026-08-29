@@ -19,11 +19,13 @@ def baixar_video(url):
     caminho = os.path.join(pasta, "video.%(ext)s")
 
     opcoes = {
-        "format": "best[ext=mp4]/best",
-        "outtmpl": caminho,
-        "merge_output_format": "mp4",
-        "quiet": True
-    }
+    "format": "bestvideo+bestaudio/best",
+    "outtmpl": caminho,
+    "merge_output_format": "mp4",
+    "quiet": True,
+    "noplaylist": True
+    
+     }
 
     with yt_dlp.YoutubeDL(opcoes) as ydl:
         ydl.download([url])
