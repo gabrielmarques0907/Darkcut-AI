@@ -2,6 +2,7 @@ import streamlit as st
 import whisper
 import tempfile
 import os
+import subprocess
 
 st.set_page_config(
     page_title="DarkCut AI",
@@ -11,12 +12,8 @@ st.set_page_config(
 st.title("🎬 DarkCut AI")
 st.subheader("Sua IA de vídeos e cortes")
 
-# Estado da aplicação
 if "cortes" not in st.session_state:
     st.session_state.cortes = []
-
-if "video_path" not in st.session_state:
-    st.session_state.video_path = None
 
 if "video_bytes" not in st.session_state:
     st.session_state.video_bytes = None
@@ -24,19 +21,14 @@ if "video_bytes" not in st.session_state:
 if "corte_selecionado" not in st.session_state:
     st.session_state.corte_selecionado = None
 
-
 video = st.file_uploader(
     "📤 Envie seu vídeo",
     type=["mp4", "mov", "avi", "mkv"]
 )
 
 if video:
-
     st.success("Vídeo recebido! 🚀")
-
-    # Guarda o vídeo na sessão
     st.session_state.video_bytes = video.getvalue()
-
     st.video(st.session_state.video_bytes)
 
     if st.button("🤖 Encontrar melhores cortes"):
@@ -58,8 +50,7 @@ if video:
                 verbose=False
             )
 
-            segmentos = resultado["segments"]
-
+        segmentos = resultado["segments"]
         cortes = []
         inicio = None
         textos = []
@@ -70,7 +61,6 @@ if video:
                 inicio = segmento["start"]
 
             textos.append(segmento["text"])
-
             fim = segmento["end"]
 
             if fim - inicio >= 30:
@@ -93,52 +83,92 @@ if video:
         )
 
 
-# Mostrar cortes salvos
 if st.session_state.cortes:
 
     st.subheader("✂️ Cortes sugeridos")
 
     for i, corte in enumerate(st.session_state.cortes):
 
-        st.markdown(
-            f"### 🎬 Corte {i + 1}"
-        )
+        st.markdown(f"### 🎬 Corte {i + 1}")
 
         st.write(
             f"⏱️ {corte['inicio']:.1f}s → "
             f"{corte['fim']:.1f}s"
         )
 
-        st.write(
-            f"📝 {corte['texto']}"
-        )
+        st.write(f"📝 {corte['texto']}")
 
         if st.button(
             f"🎯 Selecionar Corte {i + 1}",
             key=f"selecionar_{i}"
         ):
-
             st.session_state.corte_selecionado = i
 
 
-# Mostrar seleção
 if st.session_state.corte_selecionado is not None:
 
-    numero = st.session_state.corte_selecionado + 1
-    corte = st.session_state.cortes[
-        st.session_state.corte_selecionado
-    ]
+    i = st.session_state.corte_selecionado
+    corte = st.session_state.cortes[i]
 
-    st.success(
-        f"✅ Corte {numero} selecionado!"
-    )
+    st.success(f"✅ Corte {i + 1} selecionado!")
 
-    st.write(
-        f"⏱️ {corte['inicio']:.1f}s → "
-        f"{corte['fim']:.1f}s"
-    )
+    if st.button("✂️ Gerar MP4 deste corte"):
 
-    st.info(
-        "✂️ Próximo passo: gerar automaticamente "
-        "o arquivo MP4 desse corte."
-    )
+        with st.spinner("🎬 Gerando seu corte..."):
+
+            entrada = tempfile.NamedTemporaryFile(
+                delete=False,
+                suffix=".mp4"
+            )
+
+            entrada.write(st.session_state.video_bytes)
+            entrada.close()
+
+            saida = tempfile.NamedTemporaryFile(
+                delete=False,
+                suffix=".mp4"
+            )
+            saida.close()
+
+            comando = [
+                "ffmpeg",
+                "-y",
+                "-ss",
+                str(corte["inicio"]),
+                "-i",
+                entrada.name,
+                "-t",
+                str(corte["fim"] - corte["inicio"]),
+                "-c:v",
+                "libx264",
+                "-c:a",
+                "aac",
+                saida.name
+            ]
+
+            processo = subprocess.run(
+                comando,
+                capture_output=True,
+                text=True
+            )
+
+            if processo.returncode != 0:
+                st.error("❌ Não foi possível gerar o corte.")
+                st.code(processo.stderr)
+            else:
+                st.success("🎉 Corte gerado com sucesso!")
+
+                with open(saida.name, "rb") as arquivo:
+                    video_cortado = arquivo.read()
+
+                st.video(video_cortado)
+
+                st.download_button(
+                    "⬇️ Baixar MP4",
+                    data=video_cortado,
+                    file_name=f"darkcut_corte_{i + 1}.mp4",
+                    mime="video/mp4"
+                )
+
+            os.remove(entrada.name)
+            os.remove(saida.name)
