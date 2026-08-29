@@ -3,6 +3,7 @@ import whisper
 import tempfile
 import os
 import subprocess
+import yt_dlp
 
 st.set_page_config(
     page_title="DarkCut AI",
@@ -10,90 +11,124 @@ st.set_page_config(
 )
 
 st.title("🎬 DarkCut AI")
-st.subheader("Transforme vídeos longos em Shorts")
+st.subheader("Transforme vídeos em Shorts automaticamente")
 
-st.markdown("### 🔗 Opção 1 — Link do vídeo")
+
+def baixar_video(url):
+    pasta = tempfile.mkdtemp()
+    caminho = os.path.join(pasta, "video.%(ext)s")
+
+    opcoes = {
+        "format": "best[ext=mp4]/best",
+        "outtmpl": caminho,
+        "merge_output_format": "mp4",
+        "quiet": True
+    }
+
+    with yt_dlp.YoutubeDL(opcoes) as ydl:
+        ydl.download([url])
+
+    arquivos = os.listdir(pasta)
+
+    if not arquivos:
+        raise Exception("Não foi possível obter o vídeo.")
+
+    return os.path.join(pasta, arquivos[0])
+
+
+def analisar_video(caminho):
+
+    modelo = whisper.load_model("tiny")
+
+    resultado = modelo.transcribe(
+        caminho,
+        verbose=False
+    )
+
+    segmentos = resultado["segments"]
+
+    cortes = []
+    inicio = None
+    textos = []
+
+    for segmento in segmentos:
+
+        if inicio is None:
+            inicio = segmento["start"]
+
+        textos.append(segmento["text"])
+
+        fim = segmento["end"]
+
+        if fim - inicio >= 30:
+
+            cortes.append({
+                "inicio": inicio,
+                "fim": fim,
+                "texto": " ".join(textos)
+            })
+
+            inicio = None
+            textos = []
+
+    return cortes
+
 
 url = st.text_input(
-    "Cole o link do vídeo aqui",
+    "🔗 Cole o link do vídeo",
     placeholder="https://..."
 )
 
-st.markdown("### 📤 Opção 2 — Enviar vídeo")
 
 video = st.file_uploader(
-    "Escolha um vídeo",
+    "📤 Ou envie um vídeo",
     type=["mp4", "mov", "avi", "mkv"]
 )
 
-if url:
-    st.info(
-        "🔗 Link recebido! O sistema de download "
-        "será conectado na próxima etapa."
-    )
 
-if video:
-    st.success("✅ Vídeo recebido!")
+if st.button("🤖 Analisar vídeo"):
 
-    st.session_state["video_bytes"] = video.getvalue()
+    caminho = None
 
-    st.video(st.session_state["video_bytes"])
+    try:
 
-    if st.button("🤖 Encontrar melhores cortes"):
+        if url:
+
+            with st.spinner("🔗 Obtendo vídeo..."):
+                caminho = baixar_video(url)
+
+        elif video:
+
+            arquivo = tempfile.NamedTemporaryFile(
+                delete=False,
+                suffix=".mp4"
+            )
+
+            arquivo.write(video.getvalue())
+            arquivo.close()
+
+            caminho = arquivo.name
+
+        else:
+
+            st.warning(
+                "⚠️ Cole um link ou envie um vídeo."
+            )
+
+            st.stop()
+
 
         with st.spinner("🧠 Analisando o vídeo..."):
 
-            with tempfile.NamedTemporaryFile(
-                delete=False,
-                suffix=".mp4"
-            ) as arquivo:
+            cortes = analisar_video(caminho)
 
-                arquivo.write(
-                    st.session_state["video_bytes"]
-                )
-
-                caminho = arquivo.name
-
-            modelo = whisper.load_model("tiny")
-
-            resultado = modelo.transcribe(
-                caminho,
-                verbose=False
-            )
-
-        segmentos = resultado["segments"]
-
-        cortes = []
-        inicio = None
-        textos = []
-
-        for segmento in segmentos:
-
-            if inicio is None:
-                inicio = segmento["start"]
-
-            textos.append(segmento["text"])
-
-            fim = segmento["end"]
-
-            if fim - inicio >= 30:
-
-                cortes.append({
-                    "inicio": inicio,
-                    "fim": fim,
-                    "texto": " ".join(textos)
-                })
-
-                inicio = None
-                textos = []
 
         st.session_state["cortes"] = cortes
-
-        os.remove(caminho)
 
         st.success(
             f"🔥 {len(cortes)} corte(s) encontrados!"
         )
+
 
         for i, corte in enumerate(cortes):
 
@@ -109,3 +144,19 @@ if video:
             st.write(
                 f"📝 {corte['texto']}"
             )
+
+
+    except Exception as erro:
+
+        st.error(
+            "❌ Não foi possível processar esse link."
+        )
+
+        st.code(str(erro))
+
+
+    finally:
+
+        if caminho and os.path.exists(caminho):
+
+            os.remove(caminho)
