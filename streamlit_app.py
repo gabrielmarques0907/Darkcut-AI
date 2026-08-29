@@ -23,8 +23,8 @@ st.subheader(
 )
 
 st.write(
-    "Escolha um tema, uma voz e a duração. "
-    "A inteligência artificial cuidará do restante."
+    "Escolha o tema, a voz e a duração. "
+    "A IA cuidará do restante."
 )
 
 
@@ -45,7 +45,6 @@ temas = [
     "❤️ Histórias Emocionantes"
 ]
 
-
 st.markdown("### 🎭 Escolha o tema")
 
 tema = st.selectbox(
@@ -58,6 +57,8 @@ tema = st.selectbox(
 # VOZES
 # =========================================================
 
+st.markdown("### 🎙️ Escolha sua voz")
+
 vozes = [
     "👨 Masculina 1 — Natural",
     "👨 Masculina 2 — Grave",
@@ -68,10 +69,22 @@ vozes = [
 ]
 
 
-st.markdown("### 🎙️ Escolha a voz")
+for voz_item in vozes:
+
+    col1, col2 = st.columns([4, 1])
+
+    with col1:
+        st.write(voz_item)
+
+    with col2:
+        st.button(
+            "▶️",
+            key="ouvir_" + voz_item
+        )
+
 
 voz = st.selectbox(
-    "Voz da narração",
+    "Selecione a voz para o vídeo",
     vozes
 )
 
@@ -80,10 +93,10 @@ voz = st.selectbox(
 # DURAÇÃO
 # =========================================================
 
-st.markdown("### ⏱️ Duração do vídeo")
+st.markdown("### ⏱️ Duração")
 
 duracao = st.selectbox(
-    "Escolha a duração",
+    "Escolha a duração do vídeo",
     [
         "30 segundos",
         "60 segundos",
@@ -93,13 +106,13 @@ duracao = st.selectbox(
 
 
 # =========================================================
-# ORIGEM DA HISTÓRIA
+# HISTÓRIA
 # =========================================================
 
-st.markdown("### 📚 Origem da história")
+st.markdown("### 📚 Como a história será criada?")
 
 tipo_historia = st.radio(
-    "Como você quer que a IA encontre/crie a história?",
+    "Escolha o modo",
     [
         "🔎 Procurar uma história como referência",
         "🤖 Criar uma história original",
@@ -109,26 +122,19 @@ tipo_historia = st.radio(
 
 
 # =========================================================
-# BOTÃO GERAR
+# GERAR
 # =========================================================
 
 st.markdown("---")
 
-gerar = st.button(
+if st.button(
     "✨ GERAR MEU VÍDEO",
     use_container_width=True
-)
-
-
-if gerar:
-
-    st.session_state["gerando"] = True
+):
 
     st.success(
         "🚀 Configuração recebida!"
     )
-
-    st.markdown("### ⚙️ Configurações escolhidas")
 
     st.write(
         "🎭 Tema: " + tema
@@ -143,37 +149,22 @@ if gerar:
     )
 
     st.write(
-        "📚 Tipo: " + tipo_historia
+        "📚 Modo: " + tipo_historia
     )
 
     st.info(
-        "🧠 O motor de inteligência artificial "
-        "será conectado na próxima etapa."
+        "🧠 O gerador de histórias será conectado "
+        "na próxima etapa."
     )
 
 
 # =========================================================
-# ÁREA DO VÍDEO
-# =========================================================
-
-if "gerando" in st.session_state:
-
-    st.markdown("---")
-
-    st.markdown("### 🎬 Seu vídeo")
-
-    st.write(
-        "O vídeo gerado aparecerá aqui."
-    )
-
-
-# =========================================================
-# LIMITE DIÁRIO
+# LIMITE
 # =========================================================
 
 st.markdown("---")
 
-st.markdown("### 📊 Limite diário")
+st.markdown("### 📊 Seu limite diário")
 
 st.progress(0)
 
@@ -190,12 +181,24 @@ st.markdown("---")
 
 st.markdown("### 💰 Plano DarkCut")
 
-st.write(
-    "Plano: R$ 30/mês"
-)
+st.write("R$ 30/mês")
 
 st.write(
     "🎬 Até 2 vídeos por dia"
+)
+
+
+# =========================================================
+# ÁREA DO VÍDEO
+# =========================================================
+
+st.markdown("---")
+
+st.markdown("### 🎬 Seus vídeos")
+
+st.info(
+    "Depois da geração, seu vídeo aparecerá aqui "
+    "para você assistir e baixar."
 )
 
 
@@ -206,5 +209,5 @@ st.write(
 st.markdown("---")
 
 st.caption(
-    "🎬 DarkCut AI — Ferramenta para criadores de conteúdo"
+    "🎬 DarkCut AI — Ferramenta para criadores"
 )
