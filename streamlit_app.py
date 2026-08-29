@@ -12,8 +12,7 @@ import yt_dlp
 
 st.set_page_config(
     page_title="DarkCut AI",
-    page_icon="🎬",
-    layout="centered"
+    page_icon="🎬"
 )
 
 st.title("🎬 DarkCut AI")
@@ -21,7 +20,7 @@ st.subheader("Transforme vídeos longos em Shorts")
 
 
 # =========================================================
-# WHISPER
+# MODELO WHISPER
 # =========================================================
 
 @st.cache_resource
@@ -29,11 +28,64 @@ def carregar_modelo():
     return whisper.load_model("tiny")
 
 
-def transcrever(caminho):
+# =========================================================
+# EXTRAIR ÁUDIO
+# =========================================================
+
+def extrair_audio(video):
+
+    audio = tempfile.NamedTemporaryFile(
+        delete=False,
+        suffix=".wav"
+    )
+
+    audio.close()
+
+    comando = [
+        "ffmpeg",
+        "-y",
+        "-i",
+        video,
+        "-vn",
+        "-ac",
+        "1",
+        "-ar",
+        "16000",
+        "-c:a",
+        "pcm_s16le",
+        audio.name
+    ]
+
+    resultado = subprocess.run(
+        comando,
+        capture_output=True,
+        text=True
+    )
+
+    if resultado.returncode != 0:
+
+        try:
+            os.remove(audio.name)
+        except:
+            pass
+
+        raise Exception(
+            "Não foi possível extrair o áudio."
+        )
+
+    return audio.name
+
+
+# =========================================================
+# TRANSCRIÇÃO
+# =========================================================
+
+def transcrever(audio):
+
     modelo = carregar_modelo()
 
     resultado = modelo.transcribe(
-        caminho,
+        audio,
         fp16=False
     )
 
@@ -41,7 +93,57 @@ def transcrever(caminho):
 
 
 # =========================================================
-# YOUTUBE
+# CRIAR ATÉ 5 CORTES
+# =========================================================
+
+def criar_cortes(segmentos):
+
+    cortes = []
+
+    inicio = None
+    textos = []
+
+    for segmento in segmentos:
+
+        if inicio is None:
+
+            inicio = segmento["start"]
+            textos = []
+
+        textos.append(
+            segmento["text"].strip()
+        )
+
+        fim = segmento["end"]
+
+        duracao = fim - inicio
+
+        # Entre 50 e 75 segundos
+        if duracao >= 50:
+
+            fim_corte = min(
+                fim,
+                inicio + 75
+            )
+
+            cortes.append({
+                "inicio": inicio,
+                "fim": fim_corte,
+                "texto": " ".join(textos)
+            })
+
+            inicio = None
+            textos = []
+
+        # Máximo de 5
+        if len(cortes) >= 5:
+            break
+
+    return cortes[:5]
+
+
+# =========================================================
+# BAIXAR YOUTUBE
 # =========================================================
 
 def baixar_video(url):
@@ -94,7 +196,7 @@ def baixar_video(url):
     if not videos:
 
         raise Exception(
-            "Nenhum arquivo de vídeo foi encontrado."
+            "Nenhum vídeo foi encontrado."
         )
 
     return os.path.join(
@@ -104,72 +206,10 @@ def baixar_video(url):
 
 
 # =========================================================
-# ENCONTRAR ATÉ 5 CORTES DE 50 A 75 SEGUNDOS
+# GERAR CORTE
 # =========================================================
 
-def criar_cortes(segmentos):
-
-    cortes = []
-
-    inicio = None
-    textos = []
-
-    for segmento in segmentos:
-
-        if inicio is None:
-            inicio = segmento["start"]
-
-        textos.append(
-            segmento["text"].strip()
-        )
-
-        fim = segmento["end"]
-
-        duracao = fim - inicio
-
-        # Corte entre 50 e 75 segundos
-        if duracao >= 50:
-
-            if duracao <= 75:
-
-                cortes.append({
-                    "inicio": inicio,
-                    "fim": fim,
-                    "texto": " ".join(textos)
-                })
-
-                inicio = None
-                textos = []
-
-            else:
-
-                fim_corte = inicio + 75
-
-                cortes.append({
-                    "inicio": inicio,
-                    "fim": fim_corte,
-                    "texto": " ".join(textos)
-                })
-
-                inicio = None
-                textos = []
-
-        # Máximo de 5 cortes
-        if len(cortes) >= 5:
-            break
-
-    return cortes[:5]
-
-
-# =========================================================
-# GERAR MP4
-# =========================================================
-
-def gerar_corte(
-    entrada,
-    inicio,
-    fim
-):
+def gerar_corte(video, inicio, fim):
 
     saida = tempfile.NamedTemporaryFile(
         delete=False,
@@ -186,7 +226,7 @@ def gerar_corte(
         "-ss",
         str(inicio),
         "-i",
-        entrada,
+        video,
         "-t",
         str(duracao),
         "-c:v",
@@ -208,11 +248,6 @@ def gerar_corte(
 
     if resultado.returncode != 0:
 
-        try:
-            os.remove(saida.name)
-        except:
-            pass
-
         raise Exception(
             resultado.stderr
         )
@@ -231,8 +266,8 @@ st.markdown(
 )
 
 url = st.text_input(
-    "Cole o link do vídeo",
-    placeholder="https://www.youtube.com/watch?v=..."
+    "Cole o link aqui",
+    placeholder="https://youtube.com/..."
 )
 
 if st.button(
@@ -276,7 +311,7 @@ video = st.file_uploader(
 
 
 # =========================================================
-# PROCESSAMENTO
+# ANALISAR
 # =========================================================
 
 st.markdown("---")
@@ -286,7 +321,8 @@ if st.button(
     use_container_width=True
 ):
 
-    caminho = None
+    caminho_video = None
+    caminho_audio = None
 
     try:
 
@@ -296,14 +332,12 @@ if st.button(
 
         if video is not None:
 
-            tamanho = video.size
-
             limite = 1024 * 1024 * 1024
 
-            if tamanho > limite:
+            if video.size > limite:
 
                 st.error(
-                    "❌ O arquivo ultrapassa o limite de 1 GB."
+                    "❌ O vídeo ultrapassa o limite de 1 GB."
                 )
 
                 st.stop()
@@ -323,7 +357,7 @@ if st.button(
 
                 arquivo.close()
 
-                caminho = arquivo.name
+                caminho_video = arquivo.name
 
 
         # =============================================
@@ -333,10 +367,10 @@ if st.button(
         elif url.strip():
 
             with st.spinner(
-                "🔗 Tentando obter o vídeo..."
+                "🔗 Obtendo vídeo..."
             ):
 
-                caminho = baixar_video(
+                caminho_video = baixar_video(
                     url.strip()
                 )
 
@@ -344,15 +378,11 @@ if st.button(
         else:
 
             st.warning(
-                "⚠️ Cole um link ou envie um vídeo."
+                "⚠️ Envie um vídeo ou cole um link."
             )
 
             st.stop()
 
-
-        # =============================================
-        # RECEBIDO
-        # =============================================
 
         st.success(
             "🎬 Vídeo recebido!"
@@ -360,25 +390,29 @@ if st.button(
 
 
         # =============================================
-        # TRANSCRIÇÃO
+        # EXTRAIR ÁUDIO
         # =============================================
 
         with st.spinner(
-            "🧠 Analisando o vídeo..."
+            "🎵 Preparando áudio..."
+        ):
+
+            caminho_audio = extrair_audio(
+                caminho_video
+            )
+
+
+        # =============================================
+        # WHISPER
+        # =============================================
+
+        with st.spinner(
+            "🧠 Analisando fala do vídeo..."
         ):
 
             segmentos = transcrever(
-                caminho
+                caminho_audio
             )
-
-
-        if not segmentos:
-
-            st.warning(
-                "⚠️ Não foi possível encontrar fala."
-            )
-
-            st.stop()
 
 
         # =============================================
@@ -386,7 +420,7 @@ if st.button(
         # =============================================
 
         with st.spinner(
-            "🔥 Procurando até 5 cortes..."
+            "🔥 Procurando os melhores trechos..."
         ):
 
             cortes = criar_cortes(
@@ -397,8 +431,8 @@ if st.button(
         if not cortes:
 
             st.warning(
-                "⚠️ Não encontramos trechos entre "
-                "50 e 75 segundos."
+                "⚠️ Não encontramos trechos "
+                "entre 50 e 75 segundos."
             )
 
         else:
@@ -408,7 +442,7 @@ if st.button(
             )
 
             st.session_state["cortes"] = cortes
-            st.session_state["video"] = caminho
+            st.session_state["video"] = caminho_video
 
 
     except Exception as erro:
@@ -417,9 +451,20 @@ if st.button(
             "❌ Não foi possível processar o vídeo."
         )
 
-        st.warning(
+        st.code(
             str(erro)
         )
+
+
+    finally:
+
+        # Apaga somente o áudio temporário
+        if caminho_audio:
+
+            try:
+                os.remove(caminho_audio)
+            except:
+                pass
 
 
 # =========================================================
@@ -460,15 +505,11 @@ if "cortes" in st.session_state:
             try:
 
                 with st.spinner(
-                    "🎬 Gerando Short..."
+                    "🎬 Gerando corte..."
                 ):
 
-                    entrada = st.session_state[
-                        "video"
-                    ]
-
-                    caminho_saida = gerar_corte(
-                        entrada,
+                    arquivo_saida = gerar_corte(
+                        st.session_state["video"],
                         corte["inicio"],
                         corte["fim"]
                     )
@@ -480,7 +521,7 @@ if "cortes" in st.session_state:
 
 
                 with open(
-                    caminho_saida,
+                    arquivo_saida,
                     "rb"
                 ) as arquivo:
 
@@ -506,7 +547,7 @@ if "cortes" in st.session_state:
             except Exception as erro:
 
                 st.error(
-                    "❌ Erro ao gerar o MP4."
+                    "❌ Erro ao gerar o corte."
                 )
 
                 st.code(
