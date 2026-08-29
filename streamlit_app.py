@@ -1,9 +1,9 @@
 import streamlit as st
+import subprocess
+import tempfile
+import os
+import urllib.request
 
-
-# =========================================================
-# CONFIGURAÇÃO
-# =========================================================
 
 st.set_page_config(
     page_title="DarkCut AI",
@@ -12,91 +12,195 @@ st.set_page_config(
 )
 
 
-# =========================================================
-# CABEÇALHO
-# =========================================================
-
 st.title("🎬 DarkCut AI")
-
-st.subheader(
-    "Crie vídeos automaticamente para suas redes sociais"
-)
-
-st.write(
-    "Escolha o tema, a voz e a duração. "
-    "A IA cuidará do restante."
-)
+st.subheader("Crie vídeos automaticamente")
 
 
 # =========================================================
-# TEMAS
+# VOZ TESTE
 # =========================================================
 
-temas = [
-    "👻 Terror",
-    "🏰 Histórias Medievais",
-    "📖 Histórias Bíblicas",
-    "🕵️ Mistérios",
-    "👽 OVNIs e Fenômenos",
-    "😱 Casos Bizarros",
-    "🧟 Lendas e Criaturas",
-    "📜 História",
-    "🔥 Curiosidades",
-    "❤️ Histórias Emocionantes"
-]
+MODELO_URL = (
+    "https://huggingface.co/rhasspy/piper-voices/"
+    "resolve/main/pt/pt_BR/cadu/medium/"
+    "pt_BR-cadu-medium.onnx"
+)
 
-st.markdown("### 🎭 Escolha o tema")
-
-tema = st.selectbox(
-    "Tema do vídeo",
-    temas
+CONFIG_URL = (
+    "https://huggingface.co/rhasspy/piper-voices/"
+    "resolve/main/pt/pt_BR/cadu/medium/"
+    "pt_BR-cadu-medium.onnx.json"
 )
 
 
+@st.cache_resource
+def baixar_modelo():
+
+    pasta = os.path.join(
+        tempfile.gettempdir(),
+        "darkcut_voice"
+    )
+
+    os.makedirs(
+        pasta,
+        exist_ok=True
+    )
+
+    modelo = os.path.join(
+        pasta,
+        "voz.onnx"
+    )
+
+    config = os.path.join(
+        pasta,
+        "voz.onnx.json"
+    )
+
+    if not os.path.exists(modelo):
+
+        urllib.request.urlretrieve(
+            MODELO_URL,
+            modelo
+        )
+
+    if not os.path.exists(config):
+
+        urllib.request.urlretrieve(
+            CONFIG_URL,
+            config
+        )
+
+    return modelo, config
+
+
+def gerar_amostra():
+
+    modelo, config = baixar_modelo()
+
+    texto = (
+        "Esta é uma amostra de voz do DarkCut AI. "
+        "Em breve você poderá escolher entre seis vozes."
+    )
+
+    arquivo = tempfile.NamedTemporaryFile(
+        delete=False,
+        suffix=".wav"
+    )
+
+    arquivo.close()
+
+    comando = [
+        "python",
+        "-m",
+        "piper",
+        "--model",
+        modelo,
+        "--config",
+        config,
+        "--output_file",
+        arquivo.name
+    ]
+
+    resultado = subprocess.run(
+        comando,
+        input=texto,
+        text=True,
+        capture_output=True
+    )
+
+    if resultado.returncode != 0:
+
+        try:
+            os.remove(arquivo.name)
+        except:
+            pass
+
+        raise Exception(
+            resultado.stderr
+        )
+
+    return arquivo.name
+
+
 # =========================================================
-# VOZES
+# INTERFACE
 # =========================================================
 
 st.markdown("### 🎙️ Escolha sua voz")
 
-vozes = [
-    "👨 Masculina 1 — Natural",
-    "👨 Masculina 2 — Grave",
-    "👨 Masculina 3 — Dramática",
-    "👩 Feminina 1 — Natural",
-    "👩 Feminina 2 — Suave",
-    "👩 Feminina 3 — Dramática"
-]
+st.markdown(
+    "**👨 Masculina 1 — Natural**"
+)
 
+if st.button(
+    "▶️ Ouvir amostra",
+    use_container_width=True
+):
 
-for voz_item in vozes:
+    try:
 
-    col1, col2 = st.columns([4, 1])
+        with st.spinner(
+            "🎙️ Preparando voz..."
+        ):
 
-    with col1:
-        st.write(voz_item)
+            audio = gerar_amostra()
 
-    with col2:
-        st.button(
-            "▶️",
-            key="ouvir_" + voz_item
+        with open(
+            audio,
+            "rb"
+        ) as arquivo:
+
+            dados = arquivo.read()
+
+        st.audio(
+            dados,
+            format="audio/wav"
+        )
+
+        st.success(
+            "✅ Amostra pronta!"
+        )
+
+    except Exception as erro:
+
+        st.error(
+            "❌ Não foi possível gerar a voz."
+        )
+
+        st.code(
+            str(erro)
         )
 
 
-voz = st.selectbox(
-    "Selecione a voz para o vídeo",
-    vozes
+# =========================================================
+# RESTANTE DA INTERFACE
+# =========================================================
+
+st.markdown("---")
+
+st.markdown("### 🎭 Tema")
+
+tema = st.selectbox(
+    "Escolha o tema",
+    [
+        "👻 Terror",
+        "🏰 Histórias Medievais",
+        "📖 Histórias Bíblicas",
+        "🕵️ Mistérios",
+        "👽 OVNIs e Fenômenos",
+        "😱 Casos Bizarros",
+        "🧟 Lendas e Criaturas",
+        "📜 História",
+        "🔥 Curiosidades",
+        "❤️ Histórias Emocionantes"
+    ]
 )
 
-
-# =========================================================
-# DURAÇÃO
-# =========================================================
 
 st.markdown("### ⏱️ Duração")
 
 duracao = st.selectbox(
-    "Escolha a duração do vídeo",
+    "Escolha a duração",
     [
         "30 segundos",
         "60 segundos",
@@ -105,26 +209,6 @@ duracao = st.selectbox(
 )
 
 
-# =========================================================
-# HISTÓRIA
-# =========================================================
-
-st.markdown("### 📚 Como a história será criada?")
-
-tipo_historia = st.radio(
-    "Escolha o modo",
-    [
-        "🔎 Procurar uma história como referência",
-        "🤖 Criar uma história original",
-        "🎲 Automático"
-    ]
-)
-
-
-# =========================================================
-# GERAR
-# =========================================================
-
 st.markdown("---")
 
 if st.button(
@@ -132,79 +216,14 @@ if st.button(
     use_container_width=True
 ):
 
-    st.success(
-        "🚀 Configuração recebida!"
-    )
-
-    st.write(
-        "🎭 Tema: " + tema
-    )
-
-    st.write(
-        "🎙️ Voz: " + voz
-    )
-
-    st.write(
-        "⏱️ Duração: " + duracao
-    )
-
-    st.write(
-        "📚 Modo: " + tipo_historia
-    )
-
     st.info(
-        "🧠 O gerador de histórias será conectado "
-        "na próxima etapa."
+        "🧠 O gerador completo será conectado "
+        "nas próximas etapas."
     )
 
+    st.write("🎭 Tema:", tema)
+    st.write("⏱️ Duração:", duracao)
 
-# =========================================================
-# LIMITE
-# =========================================================
-
-st.markdown("---")
-
-st.markdown("### 📊 Seu limite diário")
-
-st.progress(0)
-
-st.caption(
-    "0 de 2 vídeos utilizados hoje"
-)
-
-
-# =========================================================
-# PLANO
-# =========================================================
-
-st.markdown("---")
-
-st.markdown("### 💰 Plano DarkCut")
-
-st.write("R$ 30/mês")
-
-st.write(
-    "🎬 Até 2 vídeos por dia"
-)
-
-
-# =========================================================
-# ÁREA DO VÍDEO
-# =========================================================
-
-st.markdown("---")
-
-st.markdown("### 🎬 Seus vídeos")
-
-st.info(
-    "Depois da geração, seu vídeo aparecerá aqui "
-    "para você assistir e baixar."
-)
-
-
-# =========================================================
-# RODAPÉ
-# =========================================================
 
 st.markdown("---")
 
