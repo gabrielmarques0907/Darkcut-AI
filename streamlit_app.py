@@ -9,7 +9,21 @@ st.set_page_config(
 )
 
 st.title("🎬 DarkCut AI")
-st.subheader("Encontre os melhores momentos do seu vídeo")
+st.subheader("Sua IA de vídeos e cortes")
+
+# Estado da aplicação
+if "cortes" not in st.session_state:
+    st.session_state.cortes = []
+
+if "video_path" not in st.session_state:
+    st.session_state.video_path = None
+
+if "video_bytes" not in st.session_state:
+    st.session_state.video_bytes = None
+
+if "corte_selecionado" not in st.session_state:
+    st.session_state.corte_selecionado = None
+
 
 video = st.file_uploader(
     "📤 Envie seu vídeo",
@@ -19,7 +33,11 @@ video = st.file_uploader(
 if video:
 
     st.success("Vídeo recebido! 🚀")
-    st.video(video)
+
+    # Guarda o vídeo na sessão
+    st.session_state.video_bytes = video.getvalue()
+
+    st.video(st.session_state.video_bytes)
 
     if st.button("🤖 Encontrar melhores cortes"):
 
@@ -30,7 +48,7 @@ if video:
                 suffix=".mp4"
             ) as arquivo:
 
-                arquivo.write(video.getbuffer())
+                arquivo.write(st.session_state.video_bytes)
                 caminho = arquivo.name
 
             modelo = whisper.load_model("tiny")
@@ -40,7 +58,7 @@ if video:
                 verbose=False
             )
 
-        segmentos = resultado["segments"]
+            segmentos = resultado["segments"]
 
         cortes = []
         inicio = None
@@ -66,47 +84,61 @@ if video:
                 inicio = None
                 textos = []
 
-        st.success(f"🔥 {len(cortes)} corte(s) encontrado(s)!")
-
-        for i, corte in enumerate(cortes):
-
-            st.markdown(
-                f"### ✂️ Corte {i + 1}"
-            )
-
-            st.write(
-                f"⏱️ {corte['inicio']:.1f}s → "
-                f"{corte['fim']:.1f}s"
-            )
-
-            st.write(
-                f"📝 {corte['texto']}"
-            )
-
-            if st.button(
-                f"🎬 Selecionar Corte {i + 1}",
-                key=f"corte_{i}"
-            ):
-
-                st.session_state["corte_selecionado"] = corte
-                st.success(
-                    f"✅ Corte {i + 1} selecionado!"
-                )
-
-        if "corte_selecionado" in st.session_state:
-
-            corte = st.session_state["corte_selecionado"]
-
-            st.subheader("🎯 Corte selecionado")
-
-            st.write(
-                f"{corte['inicio']:.1f}s → "
-                f"{corte['fim']:.1f}s"
-            )
-
-            st.info(
-                "🚧 Próxima etapa: gerar automaticamente "
-                "o arquivo MP4 desse corte."
-            )
+        st.session_state.cortes = cortes
 
         os.remove(caminho)
+
+        st.success(
+            f"🔥 {len(cortes)} corte(s) encontrado(s)!"
+        )
+
+
+# Mostrar cortes salvos
+if st.session_state.cortes:
+
+    st.subheader("✂️ Cortes sugeridos")
+
+    for i, corte in enumerate(st.session_state.cortes):
+
+        st.markdown(
+            f"### 🎬 Corte {i + 1}"
+        )
+
+        st.write(
+            f"⏱️ {corte['inicio']:.1f}s → "
+            f"{corte['fim']:.1f}s"
+        )
+
+        st.write(
+            f"📝 {corte['texto']}"
+        )
+
+        if st.button(
+            f"🎯 Selecionar Corte {i + 1}",
+            key=f"selecionar_{i}"
+        ):
+
+            st.session_state.corte_selecionado = i
+
+
+# Mostrar seleção
+if st.session_state.corte_selecionado is not None:
+
+    numero = st.session_state.corte_selecionado + 1
+    corte = st.session_state.cortes[
+        st.session_state.corte_selecionado
+    ]
+
+    st.success(
+        f"✅ Corte {numero} selecionado!"
+    )
+
+    st.write(
+        f"⏱️ {corte['inicio']:.1f}s → "
+        f"{corte['fim']:.1f}s"
+    )
+
+    st.info(
+        "✂️ Próximo passo: gerar automaticamente "
+        "o arquivo MP4 desse corte."
+    )
