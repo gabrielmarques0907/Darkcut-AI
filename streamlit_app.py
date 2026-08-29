@@ -9,7 +9,7 @@ st.set_page_config(
 )
 
 st.title("🎬 DarkCut AI")
-st.subheader("Sua IA de vídeos e cortes")
+st.subheader("Encontre os melhores momentos do seu vídeo")
 
 video = st.file_uploader(
     "📤 Envie seu vídeo",
@@ -17,6 +17,7 @@ video = st.file_uploader(
 )
 
 if video:
+
     st.success("Vídeo recebido! 🚀")
     st.video(video)
 
@@ -28,6 +29,7 @@ if video:
                 delete=False,
                 suffix=".mp4"
             ) as arquivo:
+
                 arquivo.write(video.getbuffer())
                 caminho = arquivo.name
 
@@ -38,36 +40,73 @@ if video:
                 verbose=False
             )
 
-        st.success("✅ Análise concluída!")
-
         segmentos = resultado["segments"]
 
-        st.subheader("✂️ Cortes sugeridos")
-
+        cortes = []
         inicio = None
-        fim = None
-        numero = 1
+        textos = []
 
         for segmento in segmentos:
 
             if inicio is None:
                 inicio = segmento["start"]
 
+            textos.append(segmento["text"])
+
             fim = segmento["end"]
 
-            duracao = fim - inicio
+            if fim - inicio >= 30:
 
-            if duracao >= 30:
-
-                st.write(
-                    f"🎬 **Corte {numero}** — "
-                    f"{inicio:.1f}s → {fim:.1f}s"
-                )
-
-                st.caption(segmento["text"])
+                cortes.append({
+                    "inicio": inicio,
+                    "fim": fim,
+                    "texto": " ".join(textos)
+                })
 
                 inicio = None
-                fim = None
-                numero += 1
+                textos = []
+
+        st.success(f"🔥 {len(cortes)} corte(s) encontrado(s)!")
+
+        for i, corte in enumerate(cortes):
+
+            st.markdown(
+                f"### ✂️ Corte {i + 1}"
+            )
+
+            st.write(
+                f"⏱️ {corte['inicio']:.1f}s → "
+                f"{corte['fim']:.1f}s"
+            )
+
+            st.write(
+                f"📝 {corte['texto']}"
+            )
+
+            if st.button(
+                f"🎬 Selecionar Corte {i + 1}",
+                key=f"corte_{i}"
+            ):
+
+                st.session_state["corte_selecionado"] = corte
+                st.success(
+                    f"✅ Corte {i + 1} selecionado!"
+                )
+
+        if "corte_selecionado" in st.session_state:
+
+            corte = st.session_state["corte_selecionado"]
+
+            st.subheader("🎯 Corte selecionado")
+
+            st.write(
+                f"{corte['inicio']:.1f}s → "
+                f"{corte['fim']:.1f}s"
+            )
+
+            st.info(
+                "🚧 Próxima etapa: gerar automaticamente "
+                "o arquivo MP4 desse corte."
+            )
 
         os.remove(caminho)
