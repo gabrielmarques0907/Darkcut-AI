@@ -2,6 +2,7 @@ import streamlit as st
 import tempfile
 import os
 import wave
+import urllib.request
 from piper import PiperVoice
 
 
@@ -15,10 +16,67 @@ st.subheader("Teste de voz")
 
 
 # =========================================================
-# CONFIGURAÇÃO DA VOZ
+# CONFIGURAÇÃO
 # =========================================================
 
-MODELO = "pt_BR-cadu-medium.onnx"
+PASTA_VOZ = os.path.join(
+    tempfile.gettempdir(),
+    "darkcut_voice"
+)
+
+os.makedirs(
+    PASTA_VOZ,
+    exist_ok=True
+)
+
+MODELO = os.path.join(
+    PASTA_VOZ,
+    "pt_BR-cadu-medium.onnx"
+)
+
+CONFIG = os.path.join(
+    PASTA_VOZ,
+    "pt_BR-cadu-medium.onnx.json"
+)
+
+
+URL_MODELO = (
+    "https://huggingface.co/rhasspy/piper-voices/"
+    "resolve/main/pt/pt_BR/cadu/medium/"
+    "pt_BR-cadu-medium.onnx"
+)
+
+URL_CONFIG = (
+    "https://huggingface.co/rhasspy/piper-voices/"
+    "resolve/main/pt/pt_BR/cadu/medium/"
+    "pt_BR-cadu-medium.onnx.json"
+)
+
+
+# =========================================================
+# BAIXAR MODELO
+# =========================================================
+
+def preparar_modelo():
+
+    if not os.path.exists(MODELO):
+
+        st.write("📥 Baixando modelo de voz...")
+
+        urllib.request.urlretrieve(
+            URL_MODELO,
+            MODELO
+        )
+
+
+    if not os.path.exists(CONFIG):
+
+        st.write("📥 Baixando configuração da voz...")
+
+        urllib.request.urlretrieve(
+            URL_CONFIG,
+            CONFIG
+        )
 
 
 # =========================================================
@@ -28,7 +86,12 @@ MODELO = "pt_BR-cadu-medium.onnx"
 @st.cache_resource
 def carregar_voz():
 
-    return PiperVoice.load(MODELO)
+    preparar_modelo()
+
+    return PiperVoice.load(
+        MODELO,
+        config_path=CONFIG
+    )
 
 
 # =========================================================
@@ -46,7 +109,10 @@ def gerar_audio(texto):
 
     arquivo.close()
 
-    with wave.open(arquivo.name, "wb") as wav_file:
+    with wave.open(
+        arquivo.name,
+        "wb"
+    ) as wav_file:
 
         voz.synthesize(
             texto,
@@ -67,7 +133,7 @@ st.markdown(
 )
 
 st.write(
-    "Ouça uma amostra antes de escolher."
+    "Ouça a voz antes de escolher."
 )
 
 
@@ -79,12 +145,13 @@ if st.button(
     try:
 
         with st.spinner(
-            "🎙️ Gerando amostra..."
+            "🎙️ Preparando a voz..."
         ):
 
             audio = gerar_audio(
-                "Olá! Esta é uma amostra da voz masculina do DarkCut AI."
+                "Olá! Esta é uma amostra da voz masculina natural do DarkCut AI."
             )
+
 
         with open(
             audio,
@@ -93,19 +160,22 @@ if st.button(
 
             dados = arquivo.read()
 
+
         st.audio(
             dados,
             format="audio/wav"
         )
 
+
         st.success(
-            "✅ Voz pronta!"
+            "✅ Amostra pronta!"
         )
+
 
     except Exception as erro:
 
         st.error(
-            "❌ Não foi possível gerar a voz."
+            "❌ Erro ao gerar a voz."
         )
 
         st.code(
