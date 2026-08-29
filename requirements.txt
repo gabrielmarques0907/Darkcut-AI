@@ -1,7 +1,2 @@
 streamlit
 openai-whisper
-moviepy
-pydub
-yt-dlp
-requests
-piper-tts
