@@ -1,6 +1,7 @@
 import streamlit as st
 import whisper
 import tempfile
+import os
 
 st.set_page_config(
     page_title="DarkCut AI",
@@ -9,8 +10,6 @@ st.set_page_config(
 
 st.title("🎬 DarkCut AI")
 st.subheader("Sua IA de vídeos e cortes")
-
-st.write("Envie um vídeo e a IA vai transcrever o conteúdo.")
 
 video = st.file_uploader(
     "📤 Envie seu vídeo",
@@ -21,19 +20,54 @@ if video:
     st.success("Vídeo recebido! 🚀")
     st.video(video)
 
-    if st.button("🤖 Analisar vídeo"):
+    if st.button("🤖 Encontrar melhores cortes"):
+
         with st.spinner("🧠 Analisando o vídeo..."):
+
             with tempfile.NamedTemporaryFile(
                 delete=False,
                 suffix=".mp4"
             ) as arquivo:
-                arquivo.write(video.read())
+                arquivo.write(video.getbuffer())
                 caminho = arquivo.name
 
             modelo = whisper.load_model("tiny")
-            resultado = modelo.transcribe(caminho)
+
+            resultado = modelo.transcribe(
+                caminho,
+                verbose=False
+            )
 
         st.success("✅ Análise concluída!")
 
-        st.subheader("📝 Transcrição")
-        st.write(resultado["text"])
+        segmentos = resultado["segments"]
+
+        st.subheader("✂️ Cortes sugeridos")
+
+        inicio = None
+        fim = None
+        numero = 1
+
+        for segmento in segmentos:
+
+            if inicio is None:
+                inicio = segmento["start"]
+
+            fim = segmento["end"]
+
+            duracao = fim - inicio
+
+            if duracao >= 30:
+
+                st.write(
+                    f"🎬 **Corte {numero}** — "
+                    f"{inicio:.1f}s → {fim:.1f}s"
+                )
+
+                st.caption(segmento["text"])
+
+                inicio = None
+                fim = None
+                numero += 1
+
+        os.remove(caminho)
