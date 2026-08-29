@@ -21,7 +21,7 @@ def baixar_video(url):
     saida = os.path.join(pasta, "video.%(ext)s")
 
     opcoes = {
-        "format": "best",
+        "format": "bv*+ba/b",
         "outtmpl": saida,
         "noplaylist": True,
         "quiet": True
